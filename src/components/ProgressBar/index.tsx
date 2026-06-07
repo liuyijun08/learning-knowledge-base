@@ -6,14 +6,16 @@ interface ProgressBarProps {
   max?: number;
   showLabel?: boolean;
   label?: string;
-  color?: 'blue' | 'green' | 'orange' | 'red' | 'purple';
+  color?: 'blue' | 'green' | 'emerald' | 'yellow' | 'orange' | 'red' | 'purple';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
 const colorClasses = {
   blue: 'bg-blue-500',
-  green: 'bg-emerald-500',
+  green: 'bg-green-500',
+  emerald: 'bg-emerald-500',
+  yellow: 'bg-yellow-400',
   orange: 'bg-amber-500',
   red: 'bg-red-500',
   purple: 'bg-purple-500',

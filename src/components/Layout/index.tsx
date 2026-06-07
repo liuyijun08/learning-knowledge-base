@@ -11,6 +11,7 @@ import {
   X,
   Library,
   PenLine,
+  Home,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
@@ -38,6 +39,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navItems: NavItem[] = [
     {
       path: '/',
+      label: '首页',
+      icon: <Home size={20} />,
+    },
+    {
+      path: '/resources',
       label: '资料库',
       icon: <Library size={20} />,
     },

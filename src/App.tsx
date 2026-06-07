@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from '@/components/Layout';
+import Home from '@/pages/Home';
 import ResourceList from '@/pages/ResourceList';
 import ResourceDetail from '@/pages/ResourceDetail';
 import ResourceEditor from '@/pages/ResourceEditor';
@@ -21,7 +22,8 @@ export default function App() {
       <ThemeInitializer>
         <Layout>
           <Routes>
-            <Route path="/" element={<ResourceList />} />
+            <Route path="/" element={<Home />} />
+            <Route path="/resources" element={<ResourceList />} />
             <Route path="/resource/new" element={<ResourceEditor />} />
             <Route path="/resource/:id" element={<ResourceDetail />} />
             <Route path="/resource/:id/edit" element={<ResourceEditor />} />
