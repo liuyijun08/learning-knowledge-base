@@ -1,74 +1,44 @@
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SearchBar } from '@/components/SearchBar';
 import { NoteCard } from '@/components/Card';
 import { TagCloud } from '@/components/Tag';
 import { useStore } from '@/store';
-import { searchEngine } from '@/modules/searchEngine';
-import { tagSystem } from '@/modules/tagSystem';
-import type { Tag as TagType } from '@/types';
+import { useListFilter, noteSortOptions } from '@/hooks/useListFilter';
+import type { Note } from '@/types';
 import { FileText, Plus, Filter, ArrowUpDown } from 'lucide-react';
 
 const NoteList: React.FC = () => {
   const navigate = useNavigate();
   const { notes, resources, tags } = useStore();
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchType, setSearchType] = useState<'all' | 'resource' | 'note'>('note');
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated');
-
-  const tagCloud = useMemo(
-    () => tagSystem.getTagCloud(tags, resources, notes),
-    [tags, resources, notes]
-  );
-
-  const filteredNotes = useMemo(() => {
-    let results = notes as (typeof notes[number])[];
-
-    if (searchQuery) {
-      results = searchEngine
-        .search(searchQuery, [], results, tags, searchType)
-        .filter((r) => 'content' in r.item && !('progress' in r.item))
-        .map((r) => r.item as typeof notes[number]);
-    }
-
-    if (selectedTagIds.length > 0) {
-      results = tagSystem.filterByMultipleTags(results, selectedTagIds, 'AND');
-    }
-
-    return results.sort((a, b) => {
-      switch (sortBy) {
-        case 'updated':
-          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-        case 'created':
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case 'name':
-          return a.title.localeCompare(b.title);
-        default:
-          return 0;
-      }
-    });
-  }, [notes, tags, searchQuery, searchType, selectedTagIds, sortBy]);
-
-  const getResourceName = (resourceId: string) => {
-    const resource = resources.find((r) => r.id === resourceId);
-    return resource?.title || '未关联资料';
-  };
-
-  const handleSearch = (query: string) => {
-    setSearchHistory((prev) => {
-      const filtered = prev.filter((q) => q !== query);
-      return [query, ...filtered].slice(0, 20);
-    });
-  };
-
-  const handleTagClick = (tag: TagType) => {
-    setSelectedTagIds((prev) =>
-      prev.includes(tag.id) ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
-    );
-  };
+  const {
+    searchQuery,
+    setSearchQuery,
+    searchType,
+    setSearchType,
+    searchHistory,
+    selectedTagIds,
+    sortBy,
+    setSortBy,
+    filteredItems: filteredNotes,
+    tagCloud,
+    handleSearch,
+    handleTagClick,
+    clearTagFilters,
+    hasActiveFilters,
+  } = useListFilter<Note>({
+    items: notes,
+    tags,
+    resources,
+    notes,
+    defaultSearchType: 'note',
+    sortOptions: noteSortOptions,
+    defaultSortBy: 'updated',
+    searchFilterFn: (r) => 'content' in r.item && !('progress' in r.item),
+    searchResources: [],
+    searchNotes: notes,
+  });
 
   return (
     <div className="space-y-6">
@@ -118,7 +88,7 @@ const NoteList: React.FC = () => {
 
             {selectedTagIds.length > 0 && (
               <button
-                onClick={() => setSelectedTagIds([])}
+                onClick={clearTagFilters}
                 className="text-xs text-blue-600 hover:text-blue-700"
               >
                 清除标签筛选
@@ -133,14 +103,10 @@ const NoteList: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              {[
-                { value: 'updated', label: '最近更新' },
-                { value: 'created', label: '创建时间' },
-                { value: 'name', label: '名称排序' },
-              ].map((option) => (
+              {noteSortOptions.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setSortBy(option.value as typeof sortBy)}
+                  onClick={() => setSortBy(option.value)}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                     sortBy === option.value
                       ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600'
@@ -159,7 +125,7 @@ const NoteList: React.FC = () => {
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
               <FileText size={48} className="mx-auto text-gray-300 mb-4" />
               <p className="text-gray-500 dark:text-gray-400 mb-4">
-                {searchQuery || selectedTagIds.length > 0
+                {hasActiveFilters
                   ? '没有找到匹配的笔记'
                   : '还没有任何笔记'}
               </p>

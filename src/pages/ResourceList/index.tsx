@@ -4,82 +4,58 @@ import { SearchBar } from '@/components/SearchBar';
 import { ResourceCard } from '@/components/Card';
 import { TagCloud } from '@/components/Tag';
 import { useStore } from '@/store';
-import { searchEngine } from '@/modules/searchEngine';
 import { tagSystem } from '@/modules/tagSystem';
-import type { Tag as TagType } from '@/types';
+import { useListFilter, resourceSortOptions } from '@/hooks/useListFilter';
+import type { Resource } from '@/types';
 import { Filter, ArrowUpDown, Grid3X3, List } from 'lucide-react';
 
 const ResourceList: React.FC = () => {
   const navigate = useNavigate();
-  const { resources, tags, learningRecords, addResource } = useStore();
+  const { resources, tags, learningRecords } = useStore();
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchType, setSearchType] = useState<'all' | 'resource' | 'note'>('resource');
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'recent' | 'progress' | 'name'>('recent');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const categories = useMemo(() => tagSystem.getAllCategories(resources), [resources]);
 
-  const tagCloud = useMemo(
-    () => tagSystem.getTagCloud(tags, resources, []),
-    [tags, resources]
-  );
+  const {
+    searchQuery,
+    setSearchQuery,
+    searchType,
+    setSearchType,
+    searchHistory,
+    selectedTagIds,
+    sortBy,
+    setSortBy,
+    filteredItems: filteredResources,
+    tagCloud,
+    handleSearch,
+    handleTagClick,
+    clearTagFilters,
+    hasActiveFilters,
+  } = useListFilter<Resource>({
+    items: resources,
+    tags,
+    resources,
+    notes: [],
+    defaultSearchType: 'resource',
+    sortOptions: resourceSortOptions,
+    defaultSortBy: 'recent',
+    searchFilterFn: (r) => 'progress' in r.item,
+    searchResources: resources,
+    searchNotes: [],
+  });
 
-  const filteredResources = useMemo(() => {
-    let results = resources as (typeof resources[number])[];
-
-    if (searchQuery) {
-      results = searchEngine
-        .search(searchQuery, results, [], tags, searchType)
-        .filter((r) => 'progress' in r.item)
-        .map((r) => r.item as typeof resources[number]);
-    }
-
-    if (selectedTagIds.length > 0) {
-      results = tagSystem.filterByMultipleTags(results, selectedTagIds, 'AND');
-    }
-
-    if (selectedCategory) {
-      results = results.filter((r) => r.category === selectedCategory);
-    }
-
-    return results.sort((a, b) => {
-      switch (sortBy) {
-        case 'recent':
-          return (
-            new Date(b.lastStudiedAt || b.updatedAt).getTime() -
-            new Date(a.lastStudiedAt || a.updatedAt).getTime()
-          );
-        case 'progress':
-          return b.progress - a.progress;
-        case 'name':
-          return a.title.localeCompare(b.title);
-        default:
-          return 0;
-      }
-    });
-  }, [resources, tags, searchQuery, searchType, selectedTagIds, selectedCategory, sortBy]);
+  const finalFilteredResources = useMemo(() => {
+    return selectedCategory
+      ? filteredResources.filter((r) => r.category === selectedCategory)
+      : filteredResources;
+  }, [filteredResources, selectedCategory]);
 
   const getStudyTime = (resourceId: string): number => {
     return learningRecords
       .filter((r) => r.resourceId === resourceId)
       .reduce((sum, r) => sum + r.duration, 0);
-  };
-
-  const handleSearch = (query: string) => {
-    setSearchHistory((prev) => {
-      const filtered = prev.filter((q) => q !== query);
-      return [query, ...filtered].slice(0, 20);
-    });
-  };
-
-  const handleTagClick = (tag: TagType) => {
-    setSelectedTagIds((prev) =>
-      prev.includes(tag.id) ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
-    );
   };
 
   return (
@@ -165,7 +141,7 @@ const ResourceList: React.FC = () => {
 
             {selectedTagIds.length > 0 && (
               <button
-                onClick={() => setSelectedTagIds([])}
+                onClick={clearTagFilters}
                 className="text-xs text-blue-600 hover:text-blue-700"
               >
                 清除标签筛选
@@ -180,14 +156,10 @@ const ResourceList: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              {[
-                { value: 'recent', label: '最近学习' },
-                { value: 'progress', label: '学习进度' },
-                { value: 'name', label: '名称排序' },
-              ].map((option) => (
+              {resourceSortOptions.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setSortBy(option.value as typeof sortBy)}
+                  onClick={() => setSortBy(option.value)}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                     sortBy === option.value
                       ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600'
@@ -202,10 +174,10 @@ const ResourceList: React.FC = () => {
         </aside>
 
         <main className="flex-1 min-w-0">
-          {filteredResources.length === 0 ? (
+          {finalFilteredResources.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
               <p className="text-gray-500 dark:text-gray-400 mb-4">
-                {searchQuery || selectedTagIds.length > 0 || selectedCategory
+                {hasActiveFilters || selectedCategory
                   ? '没有找到匹配的资料'
                   : '还没有任何学习资料'}
               </p>
@@ -224,7 +196,7 @@ const ResourceList: React.FC = () => {
                   : 'grid-cols-1'
               }`}
             >
-              {filteredResources.map((resource) => (
+              {finalFilteredResources.map((resource) => (
                 <ResourceCard
                   key={resource.id}
                   resource={resource}

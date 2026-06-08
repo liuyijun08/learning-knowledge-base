@@ -1,3 +1,89 @@
+/**
+ * ============================================================================
+ * 今日学习计划组件 - 生成逻辑说明
+ * ============================================================================
+ * 
+ * 一、数据来源
+ * ----------------------------------------------------------------------------
+ * 本组件从全局状态（useStore）中获取以下四类核心数据：
+ * 
+ * 1. reviewSchedules（复习计划）
+ *    - 来源：SM-2间隔重复算法自动生成，存储于 store.reviewSchedules
+ *    - 用途：生成"今日待复习"列表
+ *    - 关键字段：dueDate（到期日期）、completed（是否完成）、interval（间隔天数）、
+ *              repetitions（复习次数）、resourceId（关联资料ID）
+ * 
+ * 2. resources（学习资料）
+ *    - 来源：用户创建/导入的所有资料，存储于 store.resources
+ *    - 用途：生成"继续学习"列表，获取资料标题、进度、状态等信息
+ *    - 关键字段：status（状态：not_started/learning/completed）、progress（学习进度%）、
+ *              lastStudiedAt（上次学习时间）、updatedAt（更新时间）
+ * 
+ * 3. learningRecords（学习记录）
+ *    - 来源：用户每次学习后自动记录，存储于 store.learningRecords
+ *    - 用途：计算今日学习时长，生成每日目标进度
+ *    - 关键字段：date（学习日期）、duration（学习时长，单位：分钟）、resourceId（关联资料ID）
+ * 
+ * 4. settings.dailyGoal（每日学习目标）
+ *    - 来源：用户在设置中配置，存储于 store.settings.dailyGoal
+ *    - 用途：作为每日学习时长的目标值，计算完成百分比
+ *    - 默认值：60分钟
+ * 
+ * 二、推荐规则
+ * ----------------------------------------------------------------------------
+ * 
+ * 【今日待复习】推荐规则：
+ * 1. 筛选条件：复习计划的到期日期等于今天，且标记为未完成
+ * 2. 推荐数量：最多显示5项（避免信息过载）
+ * 3. 优先级：到期时间越早，优先级越高
+ * 4. 显示内容：资料标题、间隔天数、复习次数
+ * 
+ * 【继续学习】推荐规则：
+ * 1. 筛选条件：资料状态不等于"已完成"（包括学习中和未开始）
+ * 2. 推荐数量：最多显示5项
+ * 3. 优先级：最近学习/更新的资料优先（利用近因效应，保持学习连续性）
+ * 4. 显示内容：资料标题、学习进度%、进度条、状态标签
+ * 
+ * 【每日目标】计算规则：
+ * 1. 统计今日所有学习记录的时长总和
+ * 2. 与每日目标进行对比，计算完成百分比
+ * 3. 未达成时显示剩余需要学习的时间
+ * 
+ * 三、排序规则
+ * ----------------------------------------------------------------------------
+ * 
+ * 【今日待复习】排序逻辑：
+ *  - 按到期时间升序排列（dueDate 从小到大）
+ *  - 原因：越早到期的复习任务越紧急，需要优先处理
+ *  - 例如：上午到期的排在下午到期的前面
+ * 
+ * 【继续学习】排序逻辑：
+ *  - 按 lastStudiedAt（上次学习时间）降序排列，如果为空则使用 updatedAt
+ *  - 原因：基于艾宾浩斯遗忘曲线和学习连续性原则
+ *    - 最近学习过的内容记忆还比较新鲜，继续学习效率更高
+ *    - 保持学习惯性，避免资料长期搁置后重新捡起来的困难
+ *  - 例如：昨天学习过的排在一周前学习过的前面
+ * 
+ * 四、生成流程
+ * ----------------------------------------------------------------------------
+ * 
+ * 1. 确定今日日期 → 2. 从复习计划中筛选今日待复习项 → 按到期时间排序
+ *                  → 3. 从资料中筛选未完成项 → 按最近学习时间排序
+ *                  → 4. 从学习记录中统计今日学习时长
+ *                  → 5. 结合每日目标计算进度
+ *                  → 6. 渲染三个区块：待复习 / 继续学习 / 每日目标
+ * 
+ * 五、交互设计
+ * ----------------------------------------------------------------------------
+ * 
+ * - 点击复习项：跳转到对应资料详情页，开始复习
+ * - 点击"今日待复习"标题：跳转到复习日历页面查看完整复习计划
+ * - 点击未完成资料：跳转到对应资料详情页，继续学习
+ * - 点击"开始今天的学习"：一键跳转到优先级最高的未完成资料
+ * 
+ * ============================================================================
+ */
+
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -25,6 +111,21 @@ const TodayPlan: React.FC<TodayPlanProps> = ({ className }) => {
 
   const today = useMemo(() => dayjs().format('YYYY-MM-DD'), []);
 
+  /**
+   * 今日待复习列表生成逻辑
+   * 
+   * 数据来源：store.reviewSchedules（由SM-2间隔重复算法生成的复习计划）
+   * 
+   * 筛选规则：
+   * - 到期日期(dueDate)等于今天
+   * - 未完成(completed === false)
+   * 
+   * 排序规则：
+   * - 按到期时间升序排列（越早到期越优先）
+   * - 保证紧急的复习任务排在前面
+   * 
+   * 数量限制：最多5项，避免信息过载
+   */
   const todayReviews = useMemo(() => {
     return reviewSchedules
       .filter((s) => dayjs(s.dueDate).format('YYYY-MM-DD') === today && !s.completed)
@@ -32,6 +133,22 @@ const TodayPlan: React.FC<TodayPlanProps> = ({ className }) => {
       .slice(0, 5);
   }, [reviewSchedules, today]);
 
+  /**
+   * 未完成学习资料列表生成逻辑
+   * 
+   * 数据来源：store.resources（用户创建的所有学习资料）
+   * 
+   * 筛选规则：
+   * - 状态不等于"已完成"(status !== 'completed')
+   * - 包括"学习中"(learning)和"未开始"(not_started)
+   * 
+   * 排序规则：
+   * - 按 lastStudiedAt（上次学习时间）降序排列
+   * - 如果 lastStudiedAt 为空，使用 updatedAt（更新时间）作为后备
+   * - 最近学习过的资料排在前面，利用近因效应保持学习连续性
+   * 
+   * 数量限制：最多5项，聚焦最重要的学习内容
+   */
   const incompleteResources = useMemo(() => {
     return resources
       .filter((r) => r.status !== 'completed')
@@ -43,12 +160,34 @@ const TodayPlan: React.FC<TodayPlanProps> = ({ className }) => {
       .slice(0, 5);
   }, [resources]);
 
+  /**
+   * 今日学习时长统计
+   * 
+   * 数据来源：store.learningRecords（用户的学习记录）
+   * 
+   * 统计规则：
+   * - 筛选日期等于今天的所有学习记录
+   * - 累加所有记录的 duration（时长，单位：分钟）
+   * - 用于计算每日目标完成进度
+   */
   const todayStudyTime = useMemo(() => {
     return learningRecords
       .filter((r) => dayjs(r.date).format('YYYY-MM-DD') === today)
       .reduce((sum, r) => sum + r.duration, 0);
   }, [learningRecords, today]);
 
+  /**
+   * 每日目标进度计算
+   * 
+   * 数据来源：
+   * - 目标值：settings.dailyGoal（用户设置的每日学习目标，单位：分钟）
+   * - 实际值：todayStudyTime（今日已学习时长）
+   * 
+   * 计算规则：
+   * - progressPercentage：完成百分比，最大100%（避免超额时显示超过100%）
+   * - isGoalReached：是否达成目标（实际值 >= 目标值）
+   * - remainingTime：剩余需要学习的时间，最小为0（避免显示负数）
+   */
   const dailyGoal = settings.dailyGoal;
   const progressPercentage = Math.min((todayStudyTime / dailyGoal) * 100, 100);
   const isGoalReached = todayStudyTime >= dailyGoal;
